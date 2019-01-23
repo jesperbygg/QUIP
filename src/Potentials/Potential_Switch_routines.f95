@@ -1,12 +1,12 @@
 
   !*************************************************************************
   !*
-  !*  Potential_Sum routines
+  !*  Potential_Switch routines
   !*
   !*************************************************************************
 
-  recursive subroutine Potential_Sum_Initialise(this, args_str, pot1, pot2, mpi, error)
-    type(Potential_Sum), intent(inout) :: this
+  recursive subroutine Potential_Switch_Initialise(this, args_str, pot1, pot2, mpi, error)
+    type(Potential_Switch), intent(inout) :: this
     character(len=*), intent(in) :: args_str
     type(Potential), intent(in), target :: pot1, pot2
     type(MPI_Context), intent(in), optional :: mpi
@@ -21,21 +21,21 @@
 
     if (present(mpi)) this%mpi = mpi
 
-  end subroutine Potential_Sum_Initialise
+  end subroutine Potential_Switch_Initialise
 
-  recursive subroutine Potential_Sum_Finalise(this)
-    type(Potential_Sum), intent(inout) :: this
+  recursive subroutine Potential_Switch_Finalise(this)
+    type(Potential_Switch), intent(inout) :: this
     
     nullify(this%pot1)
     nullify(this%pot2)
 
-  end subroutine Potential_Sum_Finalise
+  end subroutine Potential_Switch_Finalise
 
-  recursive subroutine Potential_Sum_Print(this, file)
-    type(Potential_Sum), intent(inout) :: this
+  recursive subroutine Potential_Switch_Print(this, file)
+    type(Potential_Switch), intent(inout) :: this
     type(Inoutput), intent(inout), optional :: file
 
-    call print('Potential_Sum:', file=file)
+    call print('Potential_Switch:', file=file)
     call print('', file=file)
     if (associated(this%pot1)) then
        call print('Potential 1:', file=file)
@@ -54,10 +54,10 @@
        call print('', file=file)
     end if
 
-  end subroutine Potential_Sum_Print
+  end subroutine Potential_Switch_Print
 
-  recursive subroutine Potential_Sum_Calc(this, at, args_str, error)
-    type(Potential_Sum), intent(inout) :: this
+  recursive subroutine Potential_Switch_Calc(this, at, args_str, error)
+    type(Potential_Switch), intent(inout) :: this
     type(Atoms), intent(inout) :: at
     character(*), intent(in), optional :: args_str
     integer, intent(out), optional :: error
@@ -84,8 +84,8 @@
     call param_register(params,"calc_args_pot1", "", calc_args_pot1, help_string="additional args_str to pass along to pot1")
     call param_register(params,"calc_args_pot2", "", calc_args_pot2, help_string="additional args_str to pass along to pot2")
     call param_register(params,"store_contributions", "F", store_contributions, help_string="if true, store contributions to sum with _pot1 and _pot2 suffixes")
-    if (.not. param_read_line(params, args_str, ignore_unknown=.true.,task='Potential_Sum_calc args_str')) then
-       RAISE_ERROR('Potential_Sum_calc failed to parse args_str="'//trim(args_str)//'"', error)
+    if (.not. param_read_line(params, args_str, ignore_unknown=.true.,task='Potential_Switch_calc args_str')) then
+       RAISE_ERROR('Potential_Switch_calc failed to parse args_str="'//trim(args_str)//'"', error)
     endif
     call finalise(params)
 
@@ -95,7 +95,7 @@
     PASS_ERROR(error)
     if (len_trim(calc_energy) > 0) then
        call get_param_value(at, trim(calc_energy), my_e_1)
-       call print("Potential_sum my_e_1 " // my_e_1, PRINT_VERBOSE)
+       call print("Potential_switch my_e_1 " // my_e_1, PRINT_VERBOSE)
        if (store_contributions) call set_param_value(at, trim(calc_energy)//"_pot1", my_e_1)
      endif
     if (len_trim(calc_virial) > 0) then
@@ -129,7 +129,7 @@
     PASS_ERROR(error)
     if (len_trim(calc_energy) > 0) then
        call get_param_value(at, trim(calc_energy), energy)
-       call print("Potential_sum my_e_2 " // energy, PRINT_VERBOSE)
+       call print("Potential_switch my_e_2 " // energy, PRINT_VERBOSE)
        if (store_contributions) call set_param_value(at, trim(calc_energy)//"_pot2", energy)
        energy = my_e_1 + energy
        call set_param_value(at, trim(calc_energy), energy)
@@ -157,17 +157,17 @@
     if (allocated(my_f_1)) deallocate(my_f_1)
     if (allocated(my_local_virial_1)) deallocate(my_local_virial_1)
 
-  end subroutine Potential_Sum_Calc
+  end subroutine Potential_Switch_Calc
 
-  recursive function Potential_Sum_Cutoff(this)
-    type(Potential_Sum), intent(in) :: this
-    real(dp) :: potential_sum_cutoff
+  recursive function Potential_Switch_Cutoff(this)
+    type(Potential_Switch), intent(in) :: this
+    real(dp) :: potential_switch_cutoff
 
     if(associated(this%pot1) .and. associated(this%pot2)) then
-       potential_sum_cutoff = max(cutoff(this%pot1), cutoff(this%pot2))
+       potential_switch_cutoff = max(cutoff(this%pot1), cutoff(this%pot2))
     else
-       potential_sum_cutoff = 0.0_dp
+       potential_switch_cutoff = 0.0_dp
     endif
 
-  end function Potential_Sum_Cutoff
+  end function Potential_Switch_Cutoff
 
