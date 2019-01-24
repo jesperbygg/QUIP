@@ -46,6 +46,7 @@
 !%      ``FilePot``           File potential, used to communicate with external program
 !%      ``CallbackPot``       Callback potential, computation done by Python function
 !%      ``Sum``               Sum of two other potentials
+!%      ``Switch``            Smooth switching from one potential to another
 !%      ``ForceMixing``       Combination of forces from two other potentials
 !%      ====================  ==========================================================
 !%
@@ -221,6 +222,9 @@ module Potential_module
      logical :: is_sum = .false.
      type(Potential_Sum), pointer :: sum => null()
 
+     logical :: is_switch = .false.
+     type(Potential_Switch), pointer :: switch => null()
+
      logical :: is_forcemixing = .false.
      type(Potential_FM), pointer :: forcemixing => null()
 
@@ -395,6 +399,7 @@ module Potential_module
   end interface run
 
 #include "Potential_Sum_header.f95"
+#include "Potential_Switch_header.f95"
 #include "Potential_ForceMixing_header.f95"
 #include "Potential_EVB_header.f95"
 
@@ -554,6 +559,7 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
   call param_register(params, 'init_args_pot1', '', this%init_args_pot1, help_string="Argument string for initializing pot1 (for non-simple potentials")
   call param_register(params, 'init_args_pot2', '', this%init_args_pot2, help_string="Argument string for initializing pot2 (for non-simple potentials")
   call param_register(params, 'Sum', 'false', this%is_sum, help_string="Potential that's a sum of 2 other potentials")
+  call param_register(params, 'Switch', 'false', this%is_switch, help_string="Potential that smoothly switches from pot1 to pot2")
   call param_register(params, 'ForceMixing', 'false', this%is_forcemixing, help_string="Potential that's force-mixing of 2 other potentials")
   call param_register(params, 'EVB', 'false', this%is_evb, help_string="Potential using empirical-valence bond to mix 2 other potentials")
 #ifdef HAVE_LOCAL_E_MIX
@@ -608,7 +614,7 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
 
   if (present(mpi_obj)) this%mpi = mpi_obj
 
-  this%is_simple = .not. any( (/ this%is_sum, this%is_forcemixing, this%is_evb &
+  this%is_simple = .not. any( (/ this%is_sum, this%is_switch, this%is_forcemixing, this%is_evb &
 #ifdef HAVE_LOCAL_E_MIX
   , this%is_local_e_mix &
 #endif
@@ -618,7 +624,7 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
   , this%is_cluster &
   /) )
 
-  if (count( (/this%is_simple, this%is_sum, this%is_forcemixing, this%is_evb &
+  if (count( (/this%is_simple, this%is_sum, this%is_switch, this%is_forcemixing, this%is_evb &
 #ifdef HAVE_LOCAL_E_MIX
           , this%is_local_e_mix &
 #endif /* HAVE_LOCAL_E_MIX */
@@ -645,6 +651,17 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
     allocate(this%sum)
     call initialise(this%sum, my_args_str, u_pot1, u_pot2, mpi_obj, error=error)
     PASS_ERROR_WITH_INFO("Initializing sum", error)
+
+  else if (this%is_switch) then
+    if (present(bulk_scale)) call print("Potential_initialise Switch ignoring bulk_scale passed in", PRINT_ALWAYS)
+
+    if (.not. associated(u_pot2)) then
+      RAISE_ERROR('Potential_initialise: two potentials needs for switch potential', error)
+    endif
+
+    allocate(this%switch)
+    call initialise(this%switch, my_args_str, u_pot1, u_pot2, mpi_obj, error=error)
+    PASS_ERROR_WITH_INFO("Initializing switch", error)
 
   else if (this%is_forcemixing) then
 
@@ -758,6 +775,9 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
     else if (this%is_sum) then
        call finalise(this%sum)
        deallocate(this%sum)
+    else if (this%is_switch) then
+       call finalise(this%switch)
+       deallocate(this%switch)
     else if (this%is_forcemixing) then
        call finalise(this%forcemixing)
        deallocate(this%forcemixing)
@@ -786,6 +806,7 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
 
     this%is_simple = .false.
     this%is_sum = .false.
+    this%is_switch = .false.
     this%is_forcemixing = .false.
     this%is_evb = .false.
 #ifdef HAVE_LOCAL_E_MIX
@@ -935,6 +956,9 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
     else if (this%is_sum) then
        call Calc(this%sum, at, trim(this%calc_args)//" "//trim(args_str)//" "//trim(extra_args_str), error=error)
        PASS_ERROR(error)
+    else if (this%is_switch) then
+       call Calc(this%switch, at, trim(this%calc_args)//" "//trim(args_str)//" "//trim(extra_args_str), error=error)
+       PASS_ERROR(error)
     else if (this%is_forcemixing) then
        call Calc(this%forcemixing, at, trim(this%calc_args)//" "//trim(args_str)//" "//trim(extra_args_str), error=error)
        PASS_ERROR(error)
@@ -1016,6 +1040,8 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
        call Print(this%simple, file=file)
     else if (this%is_sum) then
        call Print(this%sum, file=file)
+    else if (this%is_switch) then
+       call Print(this%switch, file=file)
     else if (this%is_forcemixing) then
        call Print(this%forcemixing, file=file)
     else if (this%is_evb) then
@@ -1047,6 +1073,8 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
        potential_cutoff = cutoff(this%simple)
     else if (this%is_sum) then
        potential_cutoff = cutoff(this%sum)
+    else if (this%is_switch) then
+       potential_cutoff = cutoff(this%switch)
     else if (this%is_forcemixing) then
        potential_cutoff = cutoff(this%forcemixing)
     else if (this%is_evb) then
@@ -2271,6 +2299,7 @@ end subroutine pack_pos_dg
 #endif
 
 #include "Potential_Sum_routines.f95"
+#include "Potential_Switch_routines.f95"
 #include "Potential_ForceMixing_routines.f95"
 #include "Potential_EVB_routines.f95"
 

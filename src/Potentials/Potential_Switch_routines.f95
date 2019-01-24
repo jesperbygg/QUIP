@@ -171,3 +171,24 @@
 
   end function Potential_Switch_Cutoff
 
+  function Switching_Function(r)
+    real(dp), intent(in) :: r
+    real(dp), intent(out) :: S
+    real(dp) :: bf, rf
+
+    bf = 10.0_dp
+    rf = 1.0_dp
+    S = 1.0_dp / (1.0_dp + exp(-bf * (r - rf)))
+
+  end function Switching_Function
+
+  function Switching_Function_Deriv(r)
+    real(dp), intent(in) :: r
+    real(dp), intent(out) :: Sprime
+    real(dp) :: bf, rf
+
+    bf = 10.0_dp
+    rf = 1.0_dp
+    Sprime = bf * exp(-bf * (r - rf)) / (1.0_dp + exp(-bf * (r - rf)))**2
+
+  end function Switching_Function

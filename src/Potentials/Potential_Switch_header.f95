@@ -2,12 +2,8 @@
   public :: Potential_Switch
   type Potential_Switch
      type(MPI_context) :: mpi
-
      type(Potential), pointer :: pot1 => null() 
      type(Potential), pointer :: pot2 => null() 
-
-     logical  :: subtract_pot1
-     logical  :: subtract_pot2
   end type Potential_Switch
 
   interface Initialise
@@ -29,4 +25,3 @@
   interface Calc
      module procedure Potential_Switch_Calc
   end interface
-
