@@ -73,6 +73,10 @@
     character(STRING_LENGTH) :: calc_energy, calc_force, calc_local_energy, calc_virial, calc_local_virial, calc_args_pot1, calc_args_pot2, my_args_str
     logical :: store_contributions
 
+    real(dp), allocatable :: rnn_list(:)
+    real(dp) :: rmin, r, dr(3), S
+    integer :: i, j, ji
+
     INIT_ERROR(error)
 
     call initialise(params)
@@ -93,11 +97,21 @@
 
     call calc(this%pot1, at, args_str=trim(my_args_str)//" "//calc_args_pot1, error=error)
     PASS_ERROR(error)
-    if (len_trim(calc_energy) > 0) then
-       call get_param_value(at, trim(calc_energy), my_e_1)
-       call print("Potential_switch my_e_1 " // my_e_1, PRINT_VERBOSE)
-       if (store_contributions) call set_param_value(at, trim(calc_energy)//"_pot1", my_e_1)
-     endif
+
+    ! get nearest-neighbour list (TODO do elsewhere?)
+    allocate(rnn_list(at%N))
+    do i = 1, at%N
+      rmin = 100.0_dp
+      do ji = 1, n_neighbours(at, i)
+        j = neighbour(at, i, ji, distance=r, cosines=dr)
+        if (r < rmin) then
+          rmin = r
+        endif
+      end do
+      rnn_list(i) = rmin
+    end do
+
+
     if (len_trim(calc_virial) > 0) then
        call get_param_value(at, trim(calc_virial), my_virial_1)
        if (store_contributions) call set_param_value(at, trim(calc_virial)//"_pot1", my_virial_1)
@@ -106,9 +120,19 @@
        call assign_property_pointer(at, trim(calc_local_energy), at_local_energy_ptr, error=error)
        PASS_ERROR(error)
        allocate(my_local_e_1(at%N))
-       my_local_e_1 = at_local_energy_ptr
+       ! scale energies with switching function value S(rmin)
+       do i = 1, at%N
+         S = Switching_Function(rnn_list(i))
+         my_local_e_1(i) = (1.0_dp - S) * at_local_energy_ptr(i)
+       end do
        if (store_contributions) call add_property(at, trim(calc_local_energy)//"_pot1", at_local_energy_ptr, overwrite=.true.)
     endif
+    if (len_trim(calc_energy) > 0) then
+       call get_param_value(at, trim(calc_energy), my_e_1)
+       if (store_contributions) call set_param_value(at, trim(calc_energy)//"_pot1", my_e_1)
+       my_e_1 = sum(my_local_e_1)
+       call print("Potential_switch my_e_1 " // my_e_1, PRINT_VERBOSE)
+     endif
     if (len_trim(calc_force) > 0) then
        call assign_property_pointer(at, trim(calc_force), at_force_ptr, error=error)
        PASS_ERROR(error)
@@ -127,13 +151,6 @@
 
     call calc(this%pot2, at, args_str=trim(my_args_str)//" "//calc_args_pot2, error=error)
     PASS_ERROR(error)
-    if (len_trim(calc_energy) > 0) then
-       call get_param_value(at, trim(calc_energy), energy)
-       call print("Potential_switch my_e_2 " // energy, PRINT_VERBOSE)
-       if (store_contributions) call set_param_value(at, trim(calc_energy)//"_pot2", energy)
-       energy = my_e_1 + energy
-       call set_param_value(at, trim(calc_energy), energy)
-    endif
     if (len_trim(calc_virial) > 0) then
        call get_param_value(at, trim(calc_virial), virial)
        if (store_contributions) call set_param_value(at, trim(calc_virial)//"_pot2", virial)
@@ -142,7 +159,20 @@
     endif
     if (len_trim(calc_local_energy) > 0) then
        if (store_contributions) call add_property(at, trim(calc_local_energy)//"_pot2", at_local_energy_ptr, overwrite=.true.)
+       ! scale energies with switching function value S(rmin)
+       do i = 1, at%N
+         S = Switching_Function(rnn_list(i))
+         print*, S
+         at_local_energy_ptr(i) = S * at_local_energy_ptr(i)
+       end do
        at_local_energy_ptr = my_local_e_1 + at_local_energy_ptr
+    endif
+    if (len_trim(calc_energy) > 0) then
+       call get_param_value(at, trim(calc_energy), energy)
+       if (store_contributions) call set_param_value(at, trim(calc_energy)//"_pot2", energy)
+       energy = sum(at_local_energy_ptr)
+       call print("Potential_switch my_e_2 " // energy, PRINT_VERBOSE)
+       call set_param_value(at, trim(calc_energy), energy)
     endif
     if (len_trim(calc_force) > 0) then
        if (store_contributions) call add_property(at, trim(calc_force)//"_pot2", at_force_ptr, overwrite=.true.)
@@ -156,6 +186,7 @@
     if (allocated(my_local_e_1)) deallocate(my_local_e_1)
     if (allocated(my_f_1)) deallocate(my_f_1)
     if (allocated(my_local_virial_1)) deallocate(my_local_virial_1)
+    deallocate(rnn_list)
 
   end subroutine Potential_Switch_Calc
 
@@ -171,24 +202,24 @@
 
   end function Potential_Switch_Cutoff
 
-  function Switching_Function(r)
+  real(dp) function Switching_Function(r)
+    !implicit none
     real(dp), intent(in) :: r
-    real(dp), intent(out) :: S
     real(dp) :: bf, rf
 
     bf = 10.0_dp
     rf = 1.0_dp
-    S = 1.0_dp / (1.0_dp + exp(-bf * (r - rf)))
+    Switching_Function = 1.0_dp / (1.0_dp + exp(-bf * (r - rf)))
 
   end function Switching_Function
 
-  function Switching_Function_Deriv(r)
+  real(dp) function Switching_Function_Deriv(r)
+    !implicit none
     real(dp), intent(in) :: r
-    real(dp), intent(out) :: Sprime
     real(dp) :: bf, rf
 
     bf = 10.0_dp
     rf = 1.0_dp
-    Sprime = bf * exp(-bf * (r - rf)) / (1.0_dp + exp(-bf * (r - rf)))**2
+    Switching_Function_Deriv = bf * exp(-bf * (r - rf)) / (1.0_dp + exp(-bf * (r - rf)))**2
 
-  end function Switching_Function
+  end function Switching_Function_Deriv
