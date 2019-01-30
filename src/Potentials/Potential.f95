@@ -224,6 +224,8 @@ module Potential_module
 
      logical :: is_switch = .false.
      type(Potential_Switch), pointer :: switch => null()
+     real(dp) :: r1 = -1.0
+     real(dp) :: r2 = -1.0
 
      logical :: is_forcemixing = .false.
      type(Potential_FM), pointer :: forcemixing => null()
@@ -560,6 +562,8 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
   call param_register(params, 'init_args_pot2', '', this%init_args_pot2, help_string="Argument string for initializing pot2 (for non-simple potentials")
   call param_register(params, 'Sum', 'false', this%is_sum, help_string="Potential that's a sum of 2 other potentials")
   call param_register(params, 'Switch', 'false', this%is_switch, help_string="Potential that smoothly switches from pot1 to pot2")
+  call param_register(params, 'r1', '-1.0', this%r1, help_string="Starting distance for potential switch, S(r1)=0")
+  call param_register(params, 'r2', '-1.0', this%r2, help_string="Final distance for potential switch, S(r2)=1")
   call param_register(params, 'ForceMixing', 'false', this%is_forcemixing, help_string="Potential that's force-mixing of 2 other potentials")
   call param_register(params, 'EVB', 'false', this%is_evb, help_string="Potential using empirical-valence bond to mix 2 other potentials")
 #ifdef HAVE_LOCAL_E_MIX
@@ -660,7 +664,7 @@ recursive subroutine potential_initialise(this, args_str, pot1, pot2, param_str,
     endif
 
     allocate(this%switch)
-    call initialise(this%switch, my_args_str, u_pot1, u_pot2, mpi_obj, error=error)
+    call initialise(this%switch, my_args_str, u_pot1, u_pot2, this%r1, this%r2, mpi_obj, error=error)
     PASS_ERROR_WITH_INFO("Initializing switch", error)
 
   else if (this%is_forcemixing) then

@@ -4,6 +4,7 @@
      type(MPI_context) :: mpi
      type(Potential), pointer :: pot1 => null() 
      type(Potential), pointer :: pot2 => null() 
+     real(dp) :: r1, r2
   end type Potential_Switch
 
   interface Initialise
